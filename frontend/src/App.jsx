@@ -2036,7 +2036,7 @@ export default function App() {
         } else if (drawing.type === 'boundary') {
           // Create an artificial boundary
           saveToHistory()
-          const newBoundary = { id: Date.now(), x1, y1, x2: snap(x2), y2: snap(y2), label: 'Open Area' }
+          const newBoundary = { id: Date.now(), x1, y1, x2: snap(x2), y2: snap(y2), label: '' }
           setCurrentBoundaries([...currentBoundaries, newBoundary])
           setSelectedBoundary(newBoundary.id)
         } else {
@@ -4376,12 +4376,12 @@ export default function App() {
                         }
                       }}
                     />
-                    {/* Dashed boundary line */}
+                    {/* Dotted boundary line - thin and subtle */}
                     <line
                       x1={x1} y1={y1} x2={x2} y2={y2}
                       stroke={isSelected ? '#f0c040' : '#9370DB'}
-                      strokeWidth={isSelected ? 3 : 2}
-                      strokeDasharray="8,4"
+                      strokeWidth={isSelected ? 2 : 1}
+                      strokeDasharray="3,3"
                       strokeLinecap="round"
                       style={{ pointerEvents: 'none' }}
                     />
