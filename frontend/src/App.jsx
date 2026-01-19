@@ -457,49 +457,68 @@ export default function App() {
     target: 'main' // 'main' or 'adu'
   })
 
-  // Project & Version Management
+  // Project & File Management (Multi-project support)
   const [showProjectPanel, setShowProjectPanel] = useState(false)
   const [showCostEstimator, setShowCostEstimator] = useState(true)
-  const [projectName, setProjectName] = useState('My Home Design')
-  const [versions, setVersions] = useState([]) // Array of saved versions
-  const [currentVersionId, setCurrentVersionId] = useState(null) // Currently loaded version
-  const [mainVersionId, setMainVersionId] = useState(null) // The designated "main" version
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(true) // Show on app open
+  const [welcomeStep, setWelcomeStep] = useState('project') // 'project' | 'file'
+  const [projects, setProjects] = useState([]) // Array of all projects
+  const [currentProjectId, setCurrentProjectId] = useState(null)
+  const [currentFileId, setCurrentFileId] = useState(null)
 
-  // Load project from localStorage on mount
+  // Helper to get current project
+  const currentProject = projects.find(p => p.id === currentProjectId)
+  const currentFile = currentProject?.files?.find(f => f.id === currentFileId)
+
+  // Legacy compatibility - map to old variable names
+  const projectName = currentProject?.name || 'My Home Design'
+  const versions = currentProject?.files || []
+  const currentVersionId = currentFileId
+  const mainVersionId = currentProject?.files?.find(f => f.isMain)?.id || null
+
+  // Load projects from localStorage on mount
   useEffect(() => {
-    const savedProject = localStorage.getItem('homeDesignerProject')
-    if (savedProject) {
+    const savedProjects = localStorage.getItem('homeDesignerProjects')
+    if (savedProjects) {
       try {
-        const project = JSON.parse(savedProject)
-        setProjectName(project.name || 'My Home Design')
-        setVersions(project.versions || [])
-        setMainVersionId(project.mainVersionId || null)
-        // Auto-load main version if it exists
-        if (project.mainVersionId && project.versions) {
-          const mainVersion = project.versions.find(v => v.id === project.mainVersionId)
-          if (mainVersion) {
-            loadVersionData(mainVersion.data)
-            setCurrentVersionId(mainVersion.id)
-          }
+        const parsed = JSON.parse(savedProjects)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProjects(parsed)
+          // Don't auto-load - let welcome screen handle it
         }
       } catch (e) {
-        console.error('Failed to load project:', e)
+        console.error('Failed to load projects:', e)
+      }
+    }
+    // Also migrate old single-project format if exists
+    const oldProject = localStorage.getItem('homeDesignerProject')
+    if (oldProject && !savedProjects) {
+      try {
+        const project = JSON.parse(oldProject)
+        const migratedProject = {
+          id: Date.now(),
+          name: project.name || 'My Home Design',
+          createdAt: Date.now(),
+          files: (project.versions || []).map(v => ({
+            ...v,
+            isMain: v.id === project.mainVersionId
+          }))
+        }
+        if (migratedProject.files.length > 0) {
+          setProjects([migratedProject])
+        }
+      } catch (e) {
+        console.error('Failed to migrate old project:', e)
       }
     }
   }, [])
 
-  // Save project to localStorage whenever versions change
+  // Save projects to localStorage whenever they change
   useEffect(() => {
-    if (versions.length > 0 || projectName !== 'My Home Design') {
-      const project = {
-        name: projectName,
-        versions: versions,
-        mainVersionId: mainVersionId,
-        lastModified: new Date().toISOString()
-      }
-      localStorage.setItem('homeDesignerProject', JSON.stringify(project))
+    if (projects.length > 0) {
+      localStorage.setItem('homeDesignerProjects', JSON.stringify(projects))
     }
-  }, [versions, projectName, mainVersionId])
+  }, [projects])
 
   // Get current design state as an object
   const getCurrentDesignState = () => ({
@@ -553,71 +572,179 @@ export default function App() {
     if (data.surroundingsVisible) setSurroundingsVisible(data.surroundingsVisible)
   }
 
-  // Save current state as a new version
-  const saveVersion = (name, isMain = false) => {
-    const newVersion = {
+  // Create a new project
+  const createNewProject = (name) => {
+    const newProject = {
       id: Date.now().toString(),
-      name: name || `Version ${versions.length + 1}`,
+      name: name || 'New Project',
       createdAt: new Date().toISOString(),
-      data: getCurrentDesignState()
+      files: []
     }
-    const updatedVersions = [...versions, newVersion]
-    setVersions(updatedVersions)
-    setCurrentVersionId(newVersion.id)
-    if (isMain || !mainVersionId) {
-      setMainVersionId(newVersion.id)
-    }
-    return newVersion.id
+    setProjects([...projects, newProject])
+    setCurrentProjectId(newProject.id)
+    setCurrentFileId(null)
+    // Reset design state for new project
+    resetDesignState()
+    return newProject.id
   }
 
-  // Update an existing version
-  const updateVersion = (versionId) => {
-    setVersions(versions.map(v =>
-      v.id === versionId
-        ? { ...v, data: getCurrentDesignState(), updatedAt: new Date().toISOString() }
-        : v
+  // Reset all design state to empty
+  const resetDesignState = () => {
+    setLines([])
+    setAreas([])
+    setDoors([])
+    setWindows([])
+    setStairs([])
+    setBoundaries([])
+    setFurniture([])
+    setAduLines([])
+    setAduAreas([])
+    setAduDoors([])
+    setAduWindows([])
+    setAduStairs([])
+    setAduBoundaries([])
+    setAduFurniture([])
+    setAduFootprint({ width: 24, height: 24 })
+    setLotBoundary([])
+    setParcelData(null)
+    setHousePosition({ x: 20, y: 40 })
+    setHouseRotation(0)
+    setAduPosition({ x: 80, y: 20 })
+    setAduRotation(0)
+    setStreets([])
+    setNearbyBuildings([])
+    setTrees([])
+    setFences([])
+    setDriveways([])
+    setBushes([])
+    setAmenities([])
+  }
+
+  // Select a project
+  const selectProject = (projectId) => {
+    setCurrentProjectId(projectId)
+    setCurrentFileId(null)
+    setWelcomeStep('file')
+  }
+
+  // Save current state as a new file in current project
+  const saveVersion = (name, isMain = false) => {
+    if (!currentProjectId) {
+      alert('Please select or create a project first')
+      return
+    }
+    const newFile = {
+      id: Date.now().toString(),
+      name: name || `File ${versions.length + 1}`,
+      createdAt: new Date().toISOString(),
+      isMain: isMain || versions.length === 0,
+      data: getCurrentDesignState()
+    }
+    setProjects(projects.map(p =>
+      p.id === currentProjectId
+        ? { ...p, files: [...p.files, newFile] }
+        : p
+    ))
+    setCurrentFileId(newFile.id)
+    return newFile.id
+  }
+
+  // Update an existing file
+  const updateVersion = (fileId) => {
+    if (!currentProjectId) return
+    setProjects(projects.map(p =>
+      p.id === currentProjectId
+        ? {
+            ...p,
+            files: p.files.map(f =>
+              f.id === fileId
+                ? { ...f, data: getCurrentDesignState(), updatedAt: new Date().toISOString() }
+                : f
+            )
+          }
+        : p
     ))
   }
 
-  // Load a specific version
-  const loadVersion = (versionId) => {
-    const version = versions.find(v => v.id === versionId)
-    if (version) {
-      loadVersionData(version.data)
-      setCurrentVersionId(versionId)
+  // Load a specific file
+  const loadVersion = (fileId) => {
+    const file = versions.find(f => f.id === fileId)
+    if (file) {
+      loadVersionData(file.data)
+      setCurrentFileId(fileId)
     }
   }
 
-  // Delete a version
-  const deleteVersion = (versionId) => {
+  // Delete a file
+  const deleteVersion = (fileId) => {
+    if (!currentProjectId) return
     if (versions.length <= 1) {
-      alert('Cannot delete the last version')
+      alert('Cannot delete the last file. Delete the project instead.')
       return
     }
-    const updatedVersions = versions.filter(v => v.id !== versionId)
-    setVersions(updatedVersions)
-    if (mainVersionId === versionId) {
-      setMainVersionId(updatedVersions[0]?.id || null)
-    }
-    if (currentVersionId === versionId) {
-      loadVersion(updatedVersions[0]?.id)
+    setProjects(projects.map(p =>
+      p.id === currentProjectId
+        ? { ...p, files: p.files.filter(f => f.id !== fileId) }
+        : p
+    ))
+    if (currentFileId === fileId) {
+      const remaining = versions.filter(f => f.id !== fileId)
+      if (remaining.length > 0) {
+        loadVersion(remaining[0].id)
+      }
     }
   }
 
-  // Promote a version to main
-  const promoteToMain = (versionId) => {
-    setMainVersionId(versionId)
+  // Delete a project
+  const deleteProject = (projectId) => {
+    if (projects.length <= 1) {
+      alert('Cannot delete the last project')
+      return
+    }
+    setProjects(projects.filter(p => p.id !== projectId))
+    if (currentProjectId === projectId) {
+      const remaining = projects.filter(p => p.id !== projectId)
+      if (remaining.length > 0) {
+        setCurrentProjectId(remaining[0].id)
+        const firstFile = remaining[0].files?.[0]
+        if (firstFile) {
+          loadVersionData(firstFile.data)
+          setCurrentFileId(firstFile.id)
+        }
+      }
+    }
   }
 
-  // Export project as JSON file
+  // Promote a file to main
+  const promoteToMain = (fileId) => {
+    if (!currentProjectId) return
+    setProjects(projects.map(p =>
+      p.id === currentProjectId
+        ? {
+            ...p,
+            files: p.files.map(f => ({
+              ...f,
+              isMain: f.id === fileId
+            }))
+          }
+        : p
+    ))
+  }
+
+  // Rename project
+  const renameProject = (projectId, newName) => {
+    setProjects(projects.map(p =>
+      p.id === projectId ? { ...p, name: newName } : p
+    ))
+  }
+
+  // Export current project as JSON file
   const exportProject = () => {
-    const project = {
-      name: projectName,
-      versions: versions,
-      mainVersionId: mainVersionId,
-      exportedAt: new Date().toISOString()
+    if (!currentProject) {
+      alert('No project selected')
+      return
     }
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(currentProject, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -633,16 +760,43 @@ export default function App() {
     const reader = new FileReader()
     reader.onload = (event) => {
       try {
-        const project = JSON.parse(event.target.result)
-        if (project.versions && Array.isArray(project.versions)) {
-          setProjectName(project.name || 'Imported Project')
-          setVersions(project.versions)
-          setMainVersionId(project.mainVersionId || project.versions[0]?.id)
-          if (project.versions.length > 0) {
-            const mainV = project.versions.find(v => v.id === project.mainVersionId) || project.versions[0]
-            loadVersionData(mainV.data)
-            setCurrentVersionId(mainV.id)
+        const imported = JSON.parse(event.target.result)
+        // Handle new format (with files array)
+        if (imported.files && Array.isArray(imported.files)) {
+          const newProject = {
+            ...imported,
+            id: Date.now().toString(), // New ID to avoid conflicts
+            name: imported.name + ' (Imported)'
           }
+          setProjects([...projects, newProject])
+          setCurrentProjectId(newProject.id)
+          if (newProject.files.length > 0) {
+            const mainFile = newProject.files.find(f => f.isMain) || newProject.files[0]
+            loadVersionData(mainFile.data)
+            setCurrentFileId(mainFile.id)
+          }
+          setShowWelcomeScreen(false)
+          alert('Project imported successfully!')
+        }
+        // Handle legacy format (with versions array)
+        else if (imported.versions && Array.isArray(imported.versions)) {
+          const newProject = {
+            id: Date.now().toString(),
+            name: imported.name || 'Imported Project',
+            createdAt: new Date().toISOString(),
+            files: imported.versions.map(v => ({
+              ...v,
+              isMain: v.id === imported.mainVersionId
+            }))
+          }
+          setProjects([...projects, newProject])
+          setCurrentProjectId(newProject.id)
+          if (newProject.files.length > 0) {
+            const mainFile = newProject.files.find(f => f.isMain) || newProject.files[0]
+            loadVersionData(mainFile.data)
+            setCurrentFileId(mainFile.id)
+          }
+          setShowWelcomeScreen(false)
           alert('Project imported successfully!')
         } else {
           alert('Invalid project file format')
@@ -2759,6 +2913,137 @@ export default function App() {
     printWindow.document.close()
   }
 
+  // Welcome Screen - shown on app open
+  if (showWelcomeScreen) {
+    return (
+      <div className="welcome-screen">
+        <div className="welcome-content">
+          <h1>Blueprint Editor</h1>
+          <p className="welcome-subtitle">Design your dream home</p>
+
+          {welcomeStep === 'project' && (
+            <div className="welcome-step">
+              <h2>What project are you working on?</h2>
+
+              {projects.length > 0 && (
+                <div className="project-list">
+                  <label>Select an existing project:</label>
+                  {projects.map(project => (
+                    <button
+                      key={project.id}
+                      className="project-option"
+                      onClick={() => selectProject(project.id)}
+                    >
+                      <span className="project-option-name">{project.name}</span>
+                      <span className="project-option-info">
+                        {project.files?.length || 0} file(s) • Created {new Date(project.createdAt).toLocaleDateString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="welcome-divider">
+                <span>or</span>
+              </div>
+
+              <button
+                className="new-project-btn"
+                onClick={() => {
+                  const name = prompt('Enter project name:', 'My Home Design')
+                  if (name) {
+                    createNewProject(name)
+                    setWelcomeStep('file')
+                  }
+                }}
+              >
+                + Start a New Project
+              </button>
+
+              <div className="welcome-divider">
+                <span>or</span>
+              </div>
+
+              <button
+                className="import-project-btn"
+                onClick={() => projectImportRef.current?.click()}
+              >
+                📥 Import Project File
+              </button>
+              <input
+                ref={projectImportRef}
+                type="file"
+                accept=".json"
+                onChange={importProject}
+                style={{ display: 'none' }}
+              />
+            </div>
+          )}
+
+          {welcomeStep === 'file' && currentProject && (
+            <div className="welcome-step">
+              <h2>Project: {currentProject.name}</h2>
+              <p>Start a new file or work from an existing file?</p>
+
+              {currentProject.files?.length > 0 && (
+                <div className="file-list">
+                  <label>Open an existing file:</label>
+                  {currentProject.files.map(file => (
+                    <button
+                      key={file.id}
+                      className={`file-option ${file.isMain ? 'main-file' : ''}`}
+                      onClick={() => {
+                        loadVersionData(file.data)
+                        setCurrentFileId(file.id)
+                        setShowWelcomeScreen(false)
+                      }}
+                    >
+                      <span className="file-option-name">
+                        {file.name}
+                        {file.isMain && <span className="main-badge">MAIN</span>}
+                      </span>
+                      <span className="file-option-info">
+                        {new Date(file.createdAt).toLocaleDateString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="welcome-divider">
+                <span>or</span>
+              </div>
+
+              <button
+                className="new-file-btn"
+                onClick={() => {
+                  const name = prompt('Enter file name:', `Design ${(currentProject.files?.length || 0) + 1}`)
+                  if (name) {
+                    resetDesignState()
+                    saveVersion(name, currentProject.files?.length === 0)
+                    setShowWelcomeScreen(false)
+                  }
+                }}
+              >
+                + Start a New File
+              </button>
+
+              <button
+                className="back-btn"
+                onClick={() => {
+                  setWelcomeStep('project')
+                  setCurrentProjectId(null)
+                }}
+              >
+                ← Back to Projects
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="app-simple">
       <header>
@@ -2778,7 +3063,7 @@ export default function App() {
             <button className={mode === 'surroundings' ? 'active' : ''} onClick={() => switchMode('surroundings')}>Surroundings</button>
           </div>
           <button onClick={() => setShowProjectPanel(!showProjectPanel)} className={showProjectPanel ? 'active' : ''}>
-            📁 Project {currentVersionId && versions.find(v => v.id === currentVersionId) ? `(${versions.find(v => v.id === currentVersionId).name})` : ''}
+            📁 {currentProject?.name || 'Project'} {currentFile ? `/ ${currentFile.name}` : ''}
           </button>
           <button onClick={exportBlueprint}>Export PDF</button>
           <button onClick={exportPNG}>Export PNG</button>
@@ -5823,69 +6108,155 @@ export default function App() {
               <button onClick={() => setShowProjectPanel(false)} className="ai-close-btn">×</button>
             </div>
 
-            <div className="project-name-section">
-              <label>Project Name</label>
-              <input
-                type="text"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                className="project-name-input"
-              />
+            {/* Project Selector Dropdown */}
+            <div className="project-selector">
+              <label>Project</label>
+              <select
+                value={currentProjectId || ''}
+                onChange={(e) => {
+                  const projectId = e.target.value
+                  if (projectId) {
+                    setCurrentProjectId(projectId)
+                    const project = projects.find(p => p.id === projectId)
+                    if (project?.files?.length > 0) {
+                      const mainFile = project.files.find(f => f.isMain) || project.files[0]
+                      loadVersionData(mainFile.data)
+                      setCurrentFileId(mainFile.id)
+                    } else {
+                      setCurrentFileId(null)
+                      resetDesignState()
+                    }
+                  }
+                }}
+                className="project-dropdown"
+              >
+                <option value="">Select a project...</option>
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} ({project.files?.length || 0} files)
+                  </option>
+                ))}
+              </select>
+              <div className="project-quick-actions">
+                <button onClick={() => {
+                  const name = prompt('Enter new project name:', 'New Project')
+                  if (name) {
+                    createNewProject(name)
+                  }
+                }} title="New Project">+ New</button>
+                {currentProjectId && (
+                  <>
+                    <button onClick={() => {
+                      const newName = prompt('Rename project:', currentProject?.name)
+                      if (newName) renameProject(currentProjectId, newName)
+                    }} title="Rename">✏️</button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete project "${currentProject?.name}"? This cannot be undone.`)) {
+                          deleteProject(currentProjectId)
+                        }
+                      }}
+                      title="Delete Project"
+                      className="delete-btn"
+                    >🗑</button>
+                  </>
+                )}
+              </div>
             </div>
 
-            <div className="project-actions">
-              <button onClick={() => {
-                const name = prompt('Enter version name:', `Version ${versions.length + 1}`)
-                if (name) saveVersion(name, false)
-              }} className="save-version-btn">
-                💾 Save New Version
-              </button>
-              {currentVersionId && (
-                <button onClick={() => updateVersion(currentVersionId)} className="update-version-btn">
-                  🔄 Update Current
-                </button>
-              )}
-            </div>
+            {/* File Selector Dropdown */}
+            {currentProjectId && (
+              <div className="file-selector">
+                <label>File</label>
+                <select
+                  value={currentFileId || ''}
+                  onChange={(e) => {
+                    const fileId = e.target.value
+                    if (fileId) {
+                      loadVersion(fileId)
+                    }
+                  }}
+                  className="file-dropdown"
+                >
+                  <option value="">Select a file...</option>
+                  {versions.map(file => (
+                    <option key={file.id} value={file.id}>
+                      {file.name} {file.isMain ? '(MAIN)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <div className="file-quick-actions">
+                  <button onClick={() => {
+                    const name = prompt('Enter new file name:', `Design ${versions.length + 1}`)
+                    if (name) {
+                      resetDesignState()
+                      saveVersion(name, versions.length === 0)
+                    }
+                  }} title="New File">+ New</button>
+                  {currentFileId && (
+                    <>
+                      <button onClick={() => updateVersion(currentFileId)} title="Save Changes">💾</button>
+                      {!currentFile?.isMain && (
+                        <button onClick={() => promoteToMain(currentFileId)} title="Make Main">⭐</button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (confirm('Delete this file?')) deleteVersion(currentFileId)
+                        }}
+                        title="Delete File"
+                        className="delete-btn"
+                      >🗑</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
-            <div className="versions-list">
-              <label>Saved Versions ({versions.length})</label>
-              {versions.length === 0 ? (
-                <div className="no-versions">No versions saved yet. Save your first version above.</div>
-              ) : (
-                versions.map(version => (
+            {/* Current File Info */}
+            {currentFile && (
+              <div className="current-file-info">
+                <div className="file-meta">
+                  <span className="file-name-display">
+                    {currentFile.name}
+                    {currentFile.isMain && <span className="main-badge">MAIN</span>}
+                  </span>
+                  <span className="file-date">
+                    Last saved: {currentFile.updatedAt
+                      ? new Date(currentFile.updatedAt).toLocaleString()
+                      : new Date(currentFile.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* All Files List */}
+            {currentProjectId && versions.length > 0 && (
+              <div className="versions-list">
+                <label>All Files ({versions.length})</label>
+                {versions.map(file => (
                   <div
-                    key={version.id}
-                    className={`version-item ${currentVersionId === version.id ? 'current' : ''} ${mainVersionId === version.id ? 'main' : ''}`}
-                    onClick={() => loadVersion(version.id)}
+                    key={file.id}
+                    className={`version-item ${currentFileId === file.id ? 'current' : ''} ${file.isMain ? 'main' : ''}`}
+                    onClick={() => loadVersion(file.id)}
                   >
                     <div className="version-info">
                       <span className="version-name">
-                        {version.name}
-                        {mainVersionId === version.id && <span className="main-badge">MAIN</span>}
+                        {file.name}
+                        {file.isMain && <span className="main-badge">MAIN</span>}
                       </span>
                       <span className="version-date">
-                        {new Date(version.createdAt).toLocaleDateString()} {new Date(version.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(file.createdAt).toLocaleDateString()}
                       </span>
                     </div>
-                    <div className="version-actions">
-                      {mainVersionId !== version.id && (
-                        <button onClick={(e) => { e.stopPropagation(); promoteToMain(version.id); }} title="Make Main">
-                          ⭐
-                        </button>
-                      )}
-                      <button onClick={(e) => { e.stopPropagation(); deleteVersion(version.id); }} title="Delete" className="delete-btn">
-                        🗑
-                      </button>
-                    </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
 
             <div className="project-io">
-              <label>Share Project</label>
-              <button onClick={exportProject} className="export-btn">
-                📤 Export Project File
+              <label>Share</label>
+              <button onClick={exportProject} className="export-btn" disabled={!currentProjectId}>
+                📤 Export Project
               </button>
               <button onClick={() => projectImportRef.current?.click()} className="import-btn">
                 📥 Import Project
@@ -5898,6 +6269,13 @@ export default function App() {
                 style={{ display: 'none' }}
               />
             </div>
+
+            <button
+              className="back-to-welcome-btn"
+              onClick={() => setShowWelcomeScreen(true)}
+            >
+              ← Back to Project Selection
+            </button>
           </div>
         )}
       </div>
