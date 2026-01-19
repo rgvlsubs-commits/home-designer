@@ -3301,25 +3301,138 @@ export default function App() {
                 </div>
               )}
               {tool === 'area' && (
-                <>
+                <div style={{
+                  background: '#2a2a2a',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  border: multiSelect.length >= 3 ? '2px solid #4CAF50' : '2px solid #444',
+                  marginTop: '8px'
+                }}>
+                  <div style={{ fontSize: '0.75rem', color: '#ffffff', fontWeight: '700', marginBottom: '10px' }}>
+                    Define Room - Steps:
+                  </div>
+
+                  {/* Step 1 */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '8px',
+                    opacity: multiSelect.length === 0 ? 1 : 0.5
+                  }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: multiSelect.length > 0 ? '#4CAF50' : '#f0c040',
+                      color: '#000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.7rem',
+                      fontWeight: '700',
+                      marginRight: '8px'
+                    }}>
+                      {multiSelect.length > 0 ? '✓' : '1'}
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: '#ccc' }}>Click walls to select</span>
+                  </div>
+
+                  {/* Wall count indicator */}
+                  <div style={{
+                    background: multiSelect.length >= 3 ? '#2d5a2d' : '#333',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    textAlign: 'center',
+                    marginBottom: '10px'
+                  }}>
+                    <span style={{
+                      fontSize: '1.2rem',
+                      fontWeight: '700',
+                      color: multiSelect.length >= 3 ? '#4CAF50' : '#f0c040'
+                    }}>
+                      {multiSelect.length}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: '#aaa', marginLeft: '6px' }}>
+                      walls selected {multiSelect.length < 3 ? `(need ${3 - multiSelect.length} more)` : '✓'}
+                    </span>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '8px',
+                    opacity: multiSelect.length >= 3 ? 1 : 0.5
+                  }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: multiSelect.length >= 3 ? '#f0c040' : '#555',
+                      color: '#000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.7rem',
+                      fontWeight: '700',
+                      marginRight: '8px'
+                    }}>
+                      2
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: '#ccc' }}>Name the room</span>
+                  </div>
+
                   <input
                     type="text"
                     value={newAreaName}
                     onChange={(e) => setNewAreaName(e.target.value)}
-                    placeholder="Room name"
+                    placeholder="Room name (e.g. Living Room)"
                     className="room-name-input"
+                    style={{
+                      marginBottom: '10px',
+                      border: multiSelect.length >= 3 ? '2px solid #f0c040' : '1px solid #444'
+                    }}
                   />
-                  <div style={{ fontSize: '0.65rem', color: '#6a9fc0', marginTop: '4px' }}>
-                    {multiSelect.length} walls selected
-                  </div>
+
+                  {/* Step 3 - Create button */}
                   <button
                     onClick={createArea}
                     disabled={multiSelect.length < 3}
-                    style={{ marginTop: '8px', opacity: multiSelect.length < 3 ? 0.5 : 1 }}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '0.9rem',
+                      fontWeight: '700',
+                      background: multiSelect.length >= 3 ? '#4CAF50' : '#444',
+                      color: multiSelect.length >= 3 ? '#fff' : '#888',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: multiSelect.length >= 3 ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.2s'
+                    }}
                   >
-                    Create Room
+                    {multiSelect.length >= 3 ? '✓ Create Room' : 'Select 3+ Walls First'}
                   </button>
-                </>
+
+                  {multiSelect.length > 0 && (
+                    <button
+                      onClick={() => setMultiSelect([])}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        fontSize: '0.75rem',
+                        marginTop: '8px',
+                        background: 'transparent',
+                        color: '#888',
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -4083,7 +4196,7 @@ export default function App() {
                   <g key={line.id}>
                     <line x1={OFFSET_X + line.x1 * SCALE} y1={OFFSET_Y + line.y1 * SCALE}
                       x2={OFFSET_X + line.x2 * SCALE} y2={OFFSET_Y + line.y2 * SCALE}
-                      stroke="transparent" strokeWidth="14" style={{ cursor: tool === 'select' ? 'move' : 'pointer' }}
+                      stroke="transparent" strokeWidth="30" style={{ cursor: tool === 'select' ? 'move' : 'pointer' }}
                       onMouseDown={(e) => handleLineClick(e, line)} />
                     <line x1={OFFSET_X + line.x1 * SCALE} y1={OFFSET_Y + line.y1 * SCALE}
                       x2={OFFSET_X + line.x2 * SCALE} y2={OFFSET_Y + line.y2 * SCALE}
@@ -4140,6 +4253,13 @@ export default function App() {
 
                 return (
                   <g key={door.id} onMouseDown={(e) => handleDoorClick(e, door)} style={{ cursor: tool === 'select' ? 'move' : 'pointer' }}>
+                    {/* Invisible hit area for easier selection */}
+                    <line
+                      x1={hingeX} y1={hingeY}
+                      x2={endX} y2={endY}
+                      stroke="transparent"
+                      strokeWidth="30"
+                    />
                     {/* Door frame (the opening) */}
                     <line
                       x1={hingeX} y1={hingeY}
@@ -4187,6 +4307,13 @@ export default function App() {
 
                 return (
                   <g key={win.id} onMouseDown={(e) => handleWindowClick(e, win)} style={{ cursor: tool === 'select' ? 'move' : 'pointer' }}>
+                    {/* Invisible hit area for easier selection */}
+                    <line
+                      x1={x1} y1={y1}
+                      x2={x2} y2={y2}
+                      stroke="transparent"
+                      strokeWidth="30"
+                    />
                     {/* Window - dotted line */}
                     <line
                       x1={x1} y1={y1}
@@ -4235,7 +4362,7 @@ export default function App() {
                     <line
                       x1={x1} y1={y1} x2={x2} y2={y2}
                       stroke="transparent"
-                      strokeWidth="15"
+                      strokeWidth="30"
                       style={{ cursor: 'move' }}
                       onMouseDown={(e) => {
                         e.stopPropagation()
@@ -4748,7 +4875,9 @@ export default function App() {
             {tool === 'boundary' && mode !== 'lot' && <div className="add-hint">Click and drag to draw a planning boundary</div>}
             {tool === 'door' && mode !== 'lot' && <div className="add-hint">Click to place a door, then adjust size in properties</div>}
             {tool === 'window' && mode !== 'lot' && <div className="add-hint">Click to place a window, then adjust size in properties</div>}
-            {tool === 'area' && mode !== 'lot' && <div className="add-hint">Click walls to select, then "Create Room"</div>}
+            {tool === 'area' && mode !== 'lot' && <div className="add-hint" style={{ background: '#333', padding: '8px 16px', borderRadius: '4px' }}>
+              <strong style={{ color: '#f0c040' }}>Define Room:</strong> Click on walls to select them (they turn teal). Need 3+ walls for a room. See panel on left for steps.
+            </div>}
             {mode === 'adu' && <div className="floor-indicator">Floor {aduFloor + 1}</div>}
             {mode === 'integrate' && <div className="add-hint">Click and drag structures to position them on the lot</div>}
             {mode === 'lot' && isTracingLot && <div className="lot-tracing-hint">Click to add boundary points • Press Complete when done</div>}
