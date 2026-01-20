@@ -255,9 +255,19 @@ header .address {
 /* Canvas Container - Notebook Paper */
 .canvas-container {
   flex: 1;
-  background: #d4d0c8;
+  background: #faf6f0; /* Same cream as canvas */
   overflow: auto;
   position: relative;
+}
+
+.canvas-scroll {
+  min-width: 100%;
+  min-height: 100%;
+  background: #faf6f0; /* Same cream as canvas */
+}
+
+.canvas-sizer {
+  background: #faf6f0; /* Same cream as canvas */
 }
 
 .canvas {
